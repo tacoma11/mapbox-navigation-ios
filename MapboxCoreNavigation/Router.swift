@@ -69,6 +69,13 @@ public protocol Router: class, CLLocationManagerDelegate {
     var reroutesProactively: Bool { get set }
     
     /**
+     If true, the `RouteController` attempts to update ETA and route congestion on an interval defined by `RouteControllerProactiveReroutingInterval`.
+     
+     Refreshing will be used only if route's mode of transportation profile is set to `.automobileAvoidingTraffic`
+     */
+    var refreshesRoute: Bool { get set }
+    
+    /**
      Advances the leg index.
      
      This is a convienence method provided to advance the leg index of any given router without having to worry about the internal data structure of the router.
@@ -93,12 +100,70 @@ protocol InternalRouter: class {
     
     var isRerouting: Bool { get set }
     
+    var isRefreshing: Bool { get set }
+    
     var directions: Directions { get }
     
     var routeProgress: RouteProgress { get set }
 }
 
 extension InternalRouter where Self: Router {
+    
+    func refreshAndCheckForFasterRoute(from location: CLLocation, routeProgress: RouteProgress) {
+        if refreshesRoute {
+            refreshRoute(from: location) {
+                self.checkForFasterRoute(from: location, routeProgress: routeProgress)
+            }
+        } else {
+            checkForFasterRoute(from: location, routeProgress: routeProgress)
+        }
+        
+    }
+    
+    func refreshRoute(from location: CLLocation, /* route progress ? */ completion: @escaping ()->()) {
+        let legIndex = routeProgress.legIndex
+        
+        guard refreshesRoute else {
+            completion()
+            return
+        }
+        
+        guard let lastProactiveRerouteDate = lastProactiveRerouteDate else {
+            self.lastProactiveRerouteDate = location.timestamp
+            completion()
+            return
+        }
+        
+        guard location.timestamp.timeIntervalSince(lastProactiveRerouteDate) >= 30 /*RouteControllerProactiveReroutingInterval*/ else {
+            completion()
+            return
+        }
+        
+        if isRefreshing {
+            completion() // should we??
+            return
+        }
+        isRefreshing = true
+        
+        directions.refresh(route: route,
+                           currentLegIndex: legIndex,
+                           completionHandler: { [weak self] (session, result) in
+                            defer {
+                                self?.isRefreshing = false
+                                completion()
+                            }
+                            
+                            guard case let .success(response) = result else {
+                                return
+                            }
+                            
+                            guard let route = response.route else {
+                                return
+                            }
+                            self?.routeProgress.refreshRoute(with: route)
+        })
+    }
+    
     func checkForFasterRoute(from location: CLLocation, routeProgress: RouteProgress) {
         // Check for faster route given users current location
         guard reroutesProactively else { return }
@@ -162,7 +227,6 @@ extension InternalRouter where Self: Router {
             guard case let .success(response) = result else {
                 return completion(session, result)
             }
-
             
             guard let mostSimilar = response.routes?.mostSimilar(to: progress.route) else {
                 return completion(session, result)
