@@ -117,6 +117,8 @@ open class RouteController: NSObject {
     
     var lastProactiveRerouteDate: Date?
     
+    var lastRouteRefresh: Date?
+    
     public var refreshesRoute: Bool = true
     
     /**
@@ -146,7 +148,7 @@ open class RouteController: NSObject {
         self.directions = directions
         self._routeProgress = RouteProgress(route: route, options: options)
         self.dataSource = source
-        refreshesRoute = options.profileIdentifier == .automobileAvoidingTraffic && options.refreshingEnabled // should we?
+        self.refreshesRoute = options.profileIdentifier == .automobileAvoidingTraffic && options.refreshingEnabled
         UIDevice.current.isBatteryMonitoringEnabled = true
         
         super.init()

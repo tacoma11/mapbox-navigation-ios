@@ -280,9 +280,7 @@ open class RouteProgress {
         }
     }
     
-    public func refreshRoute(with refreshedRoute: Route) { // seems dangerous.
-        // TODO: check multi-leg routes
-        
+    public func refreshRoute(with refreshedRoute: Route) {
         route = refreshedRoute
         currentLegProgress = RouteLegProgress(leg: route.legs[legIndex],
                                               stepIndex: currentLegProgress.stepIndex,

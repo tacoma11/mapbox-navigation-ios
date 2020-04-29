@@ -35,6 +35,8 @@ open class LegacyRouteController: NSObject, Router, InternalRouter, CLLocationMa
     var didFindFasterRoute = false
     
     var lastProactiveRerouteDate: Date?
+    
+    var lastRouteRefresh: Date?
 
     public var routeProgress: RouteProgress {
         get {
@@ -85,7 +87,7 @@ open class LegacyRouteController: NSObject, Router, InternalRouter, CLLocationMa
         self.directions = directions
         self._routeProgress = RouteProgress(route: route, options: options)
         self.dataSource = source
-        refreshesRoute = options.profileIdentifier == .automobileAvoidingTraffic && options.refreshingEnabled // should we?
+        self.refreshesRoute = options.profileIdentifier == .automobileAvoidingTraffic && options.refreshingEnabled
         UIDevice.current.isBatteryMonitoringEnabled = true
 
         super.init()

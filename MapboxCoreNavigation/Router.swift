@@ -64,14 +64,14 @@ public protocol Router: class, CLLocationManagerDelegate {
     var rawLocation: CLLocation? { get }
     
     /**
-     If true, the `RouteController` attempts to calculate a more optimal route for the user on an interval defined by `RouteControllerProactiveReroutingInterval`.
+     If true, the `RouteController` attempts to calculate a more optimal route for the user on an interval defined by `RouteControllerProactiveReroutingInterval`. If `refreshesRoute` is enabled too, reroute attempt will be fired after route refreshing.
      */
     var reroutesProactively: Bool { get set }
     
     /**
      If true, the `RouteController` attempts to update ETA and route congestion on an interval defined by `RouteControllerProactiveReroutingInterval`.
      
-     Refreshing will be used only if route's mode of transportation profile is set to `.automobileAvoidingTraffic`
+     Refreshing will be used only if route's mode of transportation profile is set to `.automobileAvoidingTraffic`. If `reroutesProactively` is enabled too, rerouting will be checked after route is refreshed.
      */
     var refreshesRoute: Bool { get set }
     
@@ -89,6 +89,8 @@ public protocol Router: class, CLLocationManagerDelegate {
 
 protocol InternalRouter: class {
     var lastProactiveRerouteDate: Date? { get set }
+    
+    var lastRouteRefresh: Date? { get set }
     
     var routeTask: URLSessionDataTask? { get set }
     
@@ -111,36 +113,33 @@ extension InternalRouter where Self: Router {
     
     func refreshAndCheckForFasterRoute(from location: CLLocation, routeProgress: RouteProgress) {
         if refreshesRoute {
-            refreshRoute(from: location) {
+            refreshRoute(from: location, legIndex: routeProgress.legIndex) {
                 self.checkForFasterRoute(from: location, routeProgress: routeProgress)
             }
         } else {
             checkForFasterRoute(from: location, routeProgress: routeProgress)
         }
-        
     }
     
-    func refreshRoute(from location: CLLocation, /* route progress ? */ completion: @escaping ()->()) {
-        let legIndex = routeProgress.legIndex
-        
+    func refreshRoute(from location: CLLocation, legIndex: Int, completion: @escaping ()->()) {
         guard refreshesRoute else {
             completion()
             return
         }
         
-        guard let lastProactiveRerouteDate = lastProactiveRerouteDate else {
-            self.lastProactiveRerouteDate = location.timestamp
+        guard let lastRouteRefresh = lastRouteRefresh else {
+            self.lastRouteRefresh = location.timestamp
             completion()
             return
         }
         
-        guard location.timestamp.timeIntervalSince(lastProactiveRerouteDate) >= 30 /*RouteControllerProactiveReroutingInterval*/ else {
+        guard location.timestamp.timeIntervalSince(lastRouteRefresh) >= RouteControllerProactiveReroutingInterval else {
             completion()
             return
         }
         
         if isRefreshing {
-            completion() // should we??
+            completion()
             return
         }
         isRefreshing = true
@@ -150,6 +149,7 @@ extension InternalRouter where Self: Router {
                            completionHandler: { [weak self] (session, result) in
                             defer {
                                 self?.isRefreshing = false
+                                self?.lastRouteRefresh = nil
                                 completion()
                             }
                             
@@ -177,13 +177,13 @@ extension InternalRouter where Self: Router {
             return
         }
         
-        guard let lastProactiveRerouteDate = lastProactiveRerouteDate else {
+        guard let lastRouteValidationDate = lastProactiveRerouteDate else {
             self.lastProactiveRerouteDate = location.timestamp
             return
         }
         
         // Only check every so often for a faster route.
-        guard location.timestamp.timeIntervalSince(lastProactiveRerouteDate) >= RouteControllerProactiveReroutingInterval else {
+        guard location.timestamp.timeIntervalSince(lastRouteValidationDate) >= RouteControllerProactiveReroutingInterval else {
             return
         }
         
